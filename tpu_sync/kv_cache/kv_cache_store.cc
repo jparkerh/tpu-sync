@@ -1542,7 +1542,7 @@ absl::Status KVCacheStore::Load(absl::Span<const std::string> block_hashes,
     // The store can be destroyed while this transfer is in flight, so every
     // touch of it goes through the lifetime fence below.
     future.OnReady([lifetime = lifetime_, host_ram_backend = backend(),
-                    raiden_id = raiden_id_,
+                    secondary_backend, raiden_id = raiden_id_,
                     block_hashes = std::vector<std::string>(
                         block_hashes.begin(), block_hashes.end()),
                     staging_host_block_ids,
@@ -1550,6 +1550,11 @@ absl::Status KVCacheStore::Load(absl::Span<const std::string> block_hashes,
                         device_block_ids.begin(), device_block_ids.end())](
                        absl::Status status) {
       if (!status.ok()) {
+        // The tier's Lookup may have answered from a stale existence cache
+        // (e.g. the files were evicted out of band). Drop those entries so the
+        // next Lookup re-probes storage. The worker's error code does not
+        // survive the RPC, so this is done for every recall failure.
+        secondary_backend->Delete(block_hashes, /*slices=*/{});
         absl::MutexLock lock(lifetime->mu);
         if (KVCacheStore* self = lifetime->store; self != nullptr) {
           self->DeallocateBlockIds(staging_host_block_ids);
