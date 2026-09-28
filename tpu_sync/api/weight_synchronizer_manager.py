@@ -101,7 +101,8 @@ class WeightSynchronizerManager:
       port: int = 0,
       worker_rpc_client: Optional[raiden_controller.WorkerRpcClient] = None,
       request_registry_ttl_s: float = 600.0,
-      broadcast_k: Optional[int] = None,
+      broadcast_host_ratio: Optional[float] = None,
+      broadcast_pipeline_stages: Optional[int] = None,
       enable_plan_cache: bool = True,
       auto_start_server: bool = False,
   ):
@@ -112,8 +113,11 @@ class WeightSynchronizerManager:
         selects an ephemeral available port upon starting the server.
       worker_rpc_client: Optional worker RPC client facade for dispatching RPCs.
       request_registry_ttl_s: TTL in seconds for request registry entries.
-      broadcast_k: Fan-out factor K for tree-based broadcast transfers across
-        multiple sampler nodes.
+      broadcast_host_ratio: Ratio of trainer TX host bandwidth to sampler RX
+        host bandwidth (K0 = B_train_TX / B_sample_RX). A value of 0.0 disables
+        tree broadcast and forces Direct P2P.
+      broadcast_pipeline_stages: Target number of pipelined broadcast stages
+        (default 4 or RAIDEN_BROADCAST_PIPELINE_STAGES).
       enable_plan_cache: Whether to cache transfer planning and resharding
         schedules across transfer invocations with identical topologies.
       auto_start_server: Whether to automatically spawn the background TCP
@@ -123,7 +127,8 @@ class WeightSynchronizerManager:
         port=port,
         worker_rpc_client=worker_rpc_client,
         request_registry_ttl_s=request_registry_ttl_s,
-        broadcast_k=broadcast_k,
+        broadcast_host_ratio=broadcast_host_ratio,
+        broadcast_pipeline_stages=broadcast_pipeline_stages,
         enable_plan_cache=enable_plan_cache,
     )
     self._server: Optional[raiden_controller.RaidenControllerServer] = None
@@ -138,6 +143,11 @@ class WeightSynchronizerManager:
   @port.setter
   def port(self, value: int) -> None:
     self._controller.port = value
+
+  @property
+  def broadcast_pipeline_stages(self) -> int:
+    """Returns the configured broadcast pipeline stages."""
+    return self._controller.broadcast_pipeline_stages
 
   def register_work_unit(
       self,
